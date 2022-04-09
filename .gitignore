@@ -1,0 +1,15 @@
+# Build
+dist/
+build/
+
+# Coverage
+coverage/
+
+# Dependency directories
+node_modules/
+
+# Environment config
+.env
+
+# VS Code config
+.vscode
