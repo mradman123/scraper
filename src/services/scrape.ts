@@ -1,3 +1,4 @@
+import path from 'path';
 import puppeteer, { Browser, Page } from 'puppeteer';
 import UserProfileModel, {
   UserProfile,
@@ -15,7 +16,9 @@ import LicenseAndCertificationModel, {
   LicenseAndCertification,
   LicenseAndCertificationDocument,
 } from '../models/licenseAndCertification.model';
+import { saveUserProfile } from './saveUserProfile';
 
+const PORT: number = parseInt(process.env.PORT as string, 10);
 const windowsWidth: number = 800;
 const windowsHeight: number = 600;
 // const windowsWidth: number = 1920;
@@ -30,68 +33,44 @@ const scrape = async (email: string, password: string) => {
   const page: Page = await browser.newPage();
   await page.setViewport({ width: windowsWidth, height: windowsHeight });
 
-  await goToPage(page);
-  await openSignInModal(page);
-  await enterCredentialsAndSignIn(page, email, password);
-  // await goToProfilePage(page);
-  await openAccountMenu(page);
-  await openProfilePage(page);
-  await page.setViewport({ width: 1920, height: 1080 }); // setting the full size on start causes problems with sign in selector
-  await closeSetupModal(page);
-  // await downloadPdf(page);
+  try {
+    await goToPage(page);
+    await openSignInModal(page);
+    await enterCredentialsAndSignIn(page, email, password);
+    await openAccountMenu(page);
+    await openProfilePage(page);
+    await page.setViewport({ width: 1920, height: 1080 }); // setting the bigger size on start causes problems with sign in selector
+    await closeSetupModal(page);
+    const pdfFileName: string = await downloadPdfAndReturnFileName(page);
 
-  // Scraping
-  const aboutMe = await scrapeAboutMe(page);
-  const experiences = await scrapeExperiences(page);
-  const { skills, suggestedSkills } = await scrapeSkills(page);
-  const educations = await scrapeEducations(page);
-  const licensesAndCertifications = await scrapeLicensesAndCertifications(page);
-
-  console.log(educations);
-  console.log(licensesAndCertifications);
-
-  const [
-    experienceDocuments,
-    educationDocuments,
-    licenseAndCertificationDocuments,
-  ] = await Promise.all([
-    ExperienceModel.insertMany(experiences),
-    EducationModel.insertMany(educations),
-    LicenseAndCertificationModel.insertMany(licensesAndCertifications),
-  ]);
-
-  const experienceIds: string[] = experienceDocuments.map(
-    (experience: ExperienceDocument) => experience.id
-  );
-  const educationIds: string[] = educationDocuments.map(
-    (education: EducationDocument) => education.id
-  );
-  const licenseAndCertificationIds: string[] =
-    licenseAndCertificationDocuments.map(
-      (licenseAndCertification: LicenseAndCertificationDocument) =>
-        licenseAndCertification.id
+    // Scraping
+    const aboutMe = await scrapeAboutMe(page);
+    const experiences = await scrapeExperiences(page);
+    const { skills, suggestedSkills } = await scrapeSkills(page);
+    const educations = await scrapeEducations(page);
+    const licensesAndCertifications = await scrapeLicensesAndCertifications(
+      page
     );
 
-  const userProfile: UserProfile = {
-    aboutMe: aboutMe as string,
-    email,
-    experiences: experienceIds,
-    skills,
-    suggestedSkills,
-    educations: educationIds,
-    licenseAndCertifications: licenseAndCertificationIds,
-  };
+    await saveUserProfile(
+      aboutMe as string,
+      email,
+      experiences,
+      skills as string[],
+      suggestedSkills as string[],
+      educations,
+      licensesAndCertifications,
+      pdfFileName
+    );
 
-  await new UserProfileModel(userProfile).save();
+    await openNavigationMenu(page);
+    await signOut(page);
+  } catch (error) {
+    throw error;
+  }
 
   await browser.close();
-  console.log('Browser closed');
-
-  // const experienceDocuments = await ExperienceModel.insertMany(experiences);
-
-  // console.log(
-  //   experienceDocuments.map((experience: ExperienceDocument) => experience.id)
-  // );
+  console.log('Closed browser');
 };
 
 const goToPage = async (page: Page) => {
@@ -102,7 +81,6 @@ const goToPage = async (page: Page) => {
 };
 
 const openSignInModal = async (page: Page) => {
-  // const [signInButton] = await page.$x("//button[contains(., 'Sign In')]");
   const [signInButton] = await page.$x("//button[contains(text(), 'Sign In')]");
   if (signInButton) {
     await signInButton.click();
@@ -124,29 +102,19 @@ const enterCredentialsAndSignIn = async (
   await page.keyboard.type(email);
   await page.focus("[name='password']");
   await page.keyboard.type(password);
-
   await page.click("[name='submit']");
-  await page.waitForNavigation();
-  await page.waitForTimeout(2000);
+
+  await page.waitForTimeout(3000);
+
+  const [invalidCredentialsMessage] = await page.$x(
+    "//div[contains(text(), 'The username and password you specified are invalid. Please try again.')]"
+  );
+
+  if (invalidCredentialsMessage) {
+    throw new Error('Invalid credentials');
+  }
 
   console.log('Submitted credentials');
-};
-
-const goToProfilePage = async (page: Page) => {
-  // const [profileCard] = await page.$x("//div[contains(., 'Ravi Van')]");
-  // if (profileCard) {
-  //   // await profileCard.click();
-  //   await profileCard.evaluate((b) => (b as HTMLElement).click());
-  // } else {
-  //   throw new Error('Profile card not found');
-  // }
-
-  // page.goto(
-  //   'https://www.glassdoor.com/member/profile/index.htm?profileOrigin=MEMBER_HOME'
-  // );
-
-  await page.waitForTimeout(1000);
-  // await page.screenshot({ path: 'goToProfilePage.png' });
 };
 
 const openAccountMenu = async (page: Page) => {
@@ -180,16 +148,25 @@ const closeSetupModal = async (page: Page) => {
 const scrapeAboutMe = async (
   page: Page
 ): Promise<string | null | undefined> => {
-  const aboutMeElement = await page.waitForSelector(
+  const [aboutMeSection] = await page.$$('#AboutMe');
+
+  if (!aboutMeSection) {
+    throw new Error('About me section not found');
+  }
+
+  const aboutMeElement = await aboutMeSection.waitForSelector(
     "[data-test='description']"
   );
+
   const aboutMe = await aboutMeElement?.evaluate((el) => el.textContent);
+
+  console.log('Scraped about me');
 
   return aboutMe;
 };
 
 const scrapeExperiences = async (page: Page): Promise<ExperienceDocument[]> => {
-  const experienceSection = (await page.$$('#Experience'))[0];
+  const [experienceSection] = await page.$$('#Experience');
 
   if (!experienceSection) {
     throw new Error('Experience section not found');
@@ -224,12 +201,15 @@ const scrapeExperiences = async (page: Page): Promise<ExperienceDocument[]> => {
     }
   });
 
+  console.log('Scraped experiences');
+
   return experiences;
 };
 
-// return : Promise<{(string | null)[]}>
-const scrapeSkills = async (page: Page) => {
-  const skillsSection = (await page.$$('#Skills'))[0];
+const scrapeSkills = async (
+  page: Page
+): Promise<{ [key: string]: (string | null)[] }> => {
+  const [skillsSection] = await page.$$('#Skills');
 
   if (!skillsSection) {
     throw new Error('Skills section not found');
@@ -253,11 +233,13 @@ const scrapeSkills = async (page: Page) => {
     }
   });
 
+  console.log('Scraped skills');
+
   return { skills, suggestedSkills };
 };
 
 const scrapeEducations = async (page: Page): Promise<EducationDocument[]> => {
-  const educationSection = (await page.$$('#Education'))[0];
+  const [educationSection] = await page.$$('#Education');
 
   if (!educationSection) {
     throw new Error('Eduction section not found');
@@ -292,13 +274,15 @@ const scrapeEducations = async (page: Page): Promise<EducationDocument[]> => {
     }
   });
 
+  console.log('Scraped educations');
+
   return educations;
 };
 
 const scrapeLicensesAndCertifications = async (
   page: Page
 ): Promise<LicenseAndCertificationDocument[]> => {
-  const licenseAndEductionSection = (await page.$$('#Certification'))[0];
+  const [licenseAndEductionSection] = await page.$$('#Certification');
 
   if (!licenseAndEductionSection) {
     throw new Error('Eduction section not found');
@@ -339,22 +323,66 @@ const scrapeLicensesAndCertifications = async (
     }
   });
 
+  console.log('Scraped licenses and certifications');
+
   return licensesAndCertifications;
 };
 
-const downloadPdf = async (page: Page) => {
-  // await page.click("[id='prefix__icon-download-2']");
+const downloadPdfAndReturnFileName = async (page: Page): Promise<string> => {
+  //@ts-ignore
+  await page._client.send('Page.setDownloadBehavior', {
+    behavior: 'allow',
+    downloadPath: './downloads',
+  });
 
-  // await page.waitForTimeout(3000);
-  // console.log('Downloaded PDF');
-  // await page.screenshot({ path: 'downloadPdf.png' });
+  const [profileInfoSection] = await page.$$('#ProfileInfo');
+  const [profileInfoActionSection] = await profileInfoSection.$$(
+    '[class*=profileInfoStyle__actions]'
+  );
 
-  const profileInfoSection = (await page.$$('#ProfileInfo'))[0];
-  await page.click('#prefix__icon-download-2');
-
-  if (!profileInfoSection) {
+  if (!profileInfoSection || !profileInfoActionSection) {
     throw new Error('Profile info section not found');
   }
+
+  const [profileName] = await profileInfoSection.$$eval('h3', textExtractor);
+
+  const downloadButton = (await profileInfoActionSection.$$('button'))[1];
+
+  if (!downloadButton) {
+    throw new Error('Download button not found');
+  }
+  await downloadButton.click();
+
+  await page.waitForTimeout(2000);
+
+  console.log('Downloaded pdf');
+
+  return `${profileName!.replace(/ /g, '_')}.pdf`;
+};
+
+const openNavigationMenu = async (page: Page) => {
+  const [navigationMenu] = await page.$$(
+    "[data-test='user-profile-dropdown-trigger']"
+  );
+
+  if (!navigationMenu) {
+    throw new Error('Navigation menu not found');
+  }
+  navigationMenu.hover();
+
+  await page.waitForTimeout(1000);
+
+  console.log('Opened navigation menu');
+};
+
+const signOut = async (page: Page) => {
+  await page.mouse.move(1530, 530);
+  await page.waitForTimeout(500);
+  await page.mouse.click(1530, 530);
+  await page.waitForNavigation();
+  await page.waitForTimeout(500);
+
+  console.log('Signed out');
 };
 
 const textExtractor = (elements: Element[]) =>

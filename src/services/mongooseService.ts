@@ -6,7 +6,6 @@ const dbOptions: ConnectionOptions = {
   autoReconnect: true,
   useCreateIndex: true,
   useNewUrlParser: true,
-  useUnifiedTopology: true,
   useFindAndModify: false,
 };
 

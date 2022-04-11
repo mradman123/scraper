@@ -21,6 +21,8 @@ export interface UserProfile {
   suggestedSkills: string[];
   educations: (Education | string)[];
   licenseAndCertifications: (LicenseAndCertification | string)[];
+  pdfFileName: string;
+  pdfURL: string;
 }
 
 export type UserProfileDocument = UserProfile & Document;
@@ -57,6 +59,18 @@ const userProfileSchema: Schema = new Schema({
   licenseAndCertifications: {
     required: true,
     type: [{ ref: 'LicenseAndCertification', type: Types.ObjectId }],
+  },
+  pdfFileName: {
+    required: true,
+    minlength: 1,
+    trim: true,
+    type: String,
+  },
+  pdfURL: {
+    required: true,
+    minlength: 1,
+    trim: true,
+    type: String,
   },
 });
 
