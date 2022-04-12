@@ -12,12 +12,9 @@ import saveUserProfile from './saveUserProfile';
 
 const windowsWidth: number = 800;
 const windowsHeight: number = 600;
-// const windowsWidth: number = 1920;
-// const windowsHeight: number = 1080;
 
 const scrape = async (email: string, password: string) => {
   const browser: Browser = await puppeteer.launch({
-    headless: false,
     args: [`--window-size=${windowsWidth},${windowsHeight}`],
   });
   const page: Page = await browser.newPage();
@@ -72,7 +69,7 @@ const goToPage = async (page: Page) => {
   await page.goto('https://www.glassdoor.com');
   await page.waitForTimeout(1000);
 
-  console.log('Gone to page');
+  console.log('Went to page');
 };
 
 const openSignInModal = async (page: Page) => {

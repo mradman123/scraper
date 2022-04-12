@@ -1,6 +1,6 @@
 import { NextFunction } from 'connect';
 import { Request, Response } from 'express';
-import jobQueue from '../../services/jobQueue';
+import agenda from '../../services/agenda';
 import scrape from '../../services/scrape';
 
 export const scrapeData = async (
@@ -9,7 +9,8 @@ export const scrapeData = async (
   next: NextFunction
 ): Promise<void> => {
   const { email, password } = req.body;
-  console.log('SCRAPING', email, password);
+
+  console.log(`Started non job scraping for ${email}`);
 
   await scrape(email, password);
 
@@ -23,7 +24,7 @@ export const runScrapingJob = async (
 ): Promise<void> => {
   const { email, password } = req.body;
 
-  await jobQueue.now('scrapingJob', { email, password });
+  await agenda.now('scrapingJob', { email, password });
 
   res.send('Job added');
 };
