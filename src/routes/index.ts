@@ -1,7 +1,7 @@
 import { NextFunction } from 'connect';
 import { Express, Request, Response } from 'express';
-import profileRouter from './profile/profile';
 import pdfRouter from './pdf/pdf';
+import profileRouter from './profile/profile';
 import scraperRouter from './scraper/scraper';
 
 export default (app: Express): void => {

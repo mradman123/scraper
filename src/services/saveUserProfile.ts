@@ -1,4 +1,3 @@
-import UserProfileModel, { UserProfile } from '../models/userProfile.model';
 import EducationModel, {
   Education,
   EducationDocument,
@@ -11,10 +10,11 @@ import LicenseAndCertificationModel, {
   LicenseAndCertification,
   LicenseAndCertificationDocument,
 } from '../models/licenseAndCertification.model';
+import UserProfileModel, { UserProfile } from '../models/userProfile.model';
 
 const PORT: number = parseInt(process.env.PORT as string, 10);
 
-export const saveUserProfile = async (
+const saveUserProfile = async (
   aboutMe: string,
   email: string,
   experiences: Experience[],
@@ -62,3 +62,5 @@ export const saveUserProfile = async (
 
   console.log('Saved user profile');
 };
+
+export default saveUserProfile;

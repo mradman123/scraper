@@ -69,7 +69,7 @@
     "ordered-imports": [true],
     "max-classes-per-file": [false],
     "no-empty": false,
-    "no-console": [true, "log", "error"],
+    "no-console": [false, "log", "error"],
     "no-shadowed-variable": false,
     "ban-types": false,
     "no-submodule-imports": false,

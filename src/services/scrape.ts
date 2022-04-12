@@ -1,36 +1,27 @@
-import path from 'path';
 import puppeteer, { Browser, Page } from 'puppeteer';
-import UserProfileModel, {
-  UserProfile,
-  UserProfileDocument,
-} from '../models/userProfile.model';
-import EducationModel, {
-  Education,
-  EducationDocument,
-} from '../models/education.model';
+import EducationModel, { EducationDocument } from '../models/education.model';
 import ExperienceModel, {
-  Experience,
   ExperienceDocument,
 } from '../models/experience.model';
 import LicenseAndCertificationModel, {
-  LicenseAndCertification,
   LicenseAndCertificationDocument,
 } from '../models/licenseAndCertification.model';
-import { saveUserProfile } from './saveUserProfile';
+import elementsTextExtractor from '../utils/elementsTextExtractor';
+import deleteUserProfile from './deleteUserProfile';
+import saveUserProfile from './saveUserProfile';
 
-const PORT: number = parseInt(process.env.PORT as string, 10);
 const windowsWidth: number = 800;
 const windowsHeight: number = 600;
 // const windowsWidth: number = 1920;
 // const windowsHeight: number = 1080;
 
 const scrape = async (email: string, password: string) => {
-  // Open browser and go to page
   const browser: Browser = await puppeteer.launch({
     headless: false,
     args: [`--window-size=${windowsWidth},${windowsHeight}`],
   });
   const page: Page = await browser.newPage();
+
   await page.setViewport({ width: windowsWidth, height: windowsHeight });
 
   try {
@@ -41,9 +32,9 @@ const scrape = async (email: string, password: string) => {
     await openProfilePage(page);
     await page.setViewport({ width: 1920, height: 1080 }); // setting the bigger size on start causes problems with sign in selector
     await closeSetupModal(page);
+
     const pdfFileName: string = await downloadPdfAndReturnFileName(page);
 
-    // Scraping
     const aboutMe = await scrapeAboutMe(page);
     const experiences = await scrapeExperiences(page);
     const { skills, suggestedSkills } = await scrapeSkills(page);
@@ -52,6 +43,7 @@ const scrape = async (email: string, password: string) => {
       page
     );
 
+    await deleteUserProfile(email);
     await saveUserProfile(
       aboutMe as string,
       email,
@@ -65,12 +57,15 @@ const scrape = async (email: string, password: string) => {
 
     await openNavigationMenu(page);
     await signOut(page);
+
+    await browser.close();
+    console.log('Closed browser');
   } catch (error) {
+    await browser.close();
+    console.log('Closed browser');
+
     throw error;
   }
-
-  await browser.close();
-  console.log('Closed browser');
 };
 
 const goToPage = async (page: Page) => {
@@ -82,6 +77,7 @@ const goToPage = async (page: Page) => {
 
 const openSignInModal = async (page: Page) => {
   const [signInButton] = await page.$x("//button[contains(text(), 'Sign In')]");
+
   if (signInButton) {
     await signInButton.click();
   } else {
@@ -103,14 +99,11 @@ const enterCredentialsAndSignIn = async (
   await page.focus("[name='password']");
   await page.keyboard.type(password);
   await page.click("[name='submit']");
-
   await page.waitForTimeout(3000);
 
-  const [invalidCredentialsMessage] = await page.$x(
-    "//div[contains(text(), 'The username and password you specified are invalid. Please try again.')]"
-  );
+  const [failedLoginDescription] = await page.$$('#descriptionColor');
 
-  if (invalidCredentialsMessage) {
+  if (failedLoginDescription) {
     throw new Error('Invalid credentials');
   }
 
@@ -126,7 +119,7 @@ const openAccountMenu = async (page: Page) => {
 
 const openProfilePage = async (page: Page) => {
   await page.click("[data-ga-lbl='My Profile']");
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(3000);
 
   console.log('Opened profile page');
 };
@@ -139,7 +132,6 @@ const closeSetupModal = async (page: Page) => {
     throw new Error('Close button not found');
   }
 
-  // await page.click("[fill='#505863']");
   await page.waitForTimeout(2000);
 
   console.log('Closed setup modal');
@@ -157,7 +149,6 @@ const scrapeAboutMe = async (
   const aboutMeElement = await aboutMeSection.waitForSelector(
     "[data-test='description']"
   );
-
   const aboutMe = await aboutMeElement?.evaluate((el) => el.textContent);
 
   console.log('Scraped about me');
@@ -179,11 +170,17 @@ const scrapeExperiences = async (page: Page): Promise<ExperienceDocument[]> => {
     employmentPeriods,
     employmentDescriptions,
   ] = await Promise.all([
-    experienceSection.$$eval("[data-test='title']", textExtractor),
-    experienceSection.$$eval("[data-test='employer']", textExtractor),
-    experienceSection.$$eval("[data-test='location']", textExtractor),
-    experienceSection.$$eval("[data-test='employmentperiod']", textExtractor),
-    experienceSection.$$eval("[data-test='description']", textExtractor),
+    experienceSection.$$eval("[data-test='title']", elementsTextExtractor),
+    experienceSection.$$eval("[data-test='employer']", elementsTextExtractor),
+    experienceSection.$$eval("[data-test='location']", elementsTextExtractor),
+    experienceSection.$$eval(
+      "[data-test='employmentperiod']",
+      elementsTextExtractor
+    ),
+    experienceSection.$$eval(
+      "[data-test='description']",
+      elementsTextExtractor
+    ),
   ]);
 
   const experiences: ExperienceDocument[] = [];
@@ -217,7 +214,7 @@ const scrapeSkills = async (
 
   const allSkills = await skillsSection.$$eval(
     '.css-zomrfc > span',
-    textExtractor
+    elementsTextExtractor
   );
   const skills: string[] = [];
   const suggestedSkills: string[] = [];
@@ -252,11 +249,14 @@ const scrapeEducations = async (page: Page): Promise<EducationDocument[]> => {
     graduationDates,
     educationDescriptions,
   ] = await Promise.all([
-    educationSection.$$eval("[data-test='university']", textExtractor),
-    educationSection.$$eval("[data-test='degree']", textExtractor),
-    educationSection.$$eval("[data-test='location']", textExtractor),
-    educationSection.$$eval("[data-test='graduationDate']", textExtractor),
-    educationSection.$$eval("[data-test='description']", textExtractor),
+    educationSection.$$eval("[data-test='university']", elementsTextExtractor),
+    educationSection.$$eval("[data-test='degree']", elementsTextExtractor),
+    educationSection.$$eval("[data-test='location']", elementsTextExtractor),
+    educationSection.$$eval(
+      "[data-test='graduationDate']",
+      elementsTextExtractor
+    ),
+    educationSection.$$eval("[data-test='description']", elementsTextExtractor),
   ]);
 
   const educations: EducationDocument[] = [];
@@ -294,18 +294,21 @@ const scrapeLicensesAndCertifications = async (
     certificationPeriods,
     licenseAndEductionDescriptions,
   ] = await Promise.all([
-    licenseAndEductionSection.$$eval("[data-test='title']", textExtractor),
+    licenseAndEductionSection.$$eval(
+      "[data-test='title']",
+      elementsTextExtractor
+    ),
     licenseAndEductionSection.$$eval(
       "[data-test='employer'] > a",
-      textExtractor
+      elementsTextExtractor
     ),
     licenseAndEductionSection.$$eval(
       "[data-test='certificationperiod']",
-      textExtractor
+      elementsTextExtractor
     ),
     licenseAndEductionSection.$$eval(
       "[data-test='description']",
-      textExtractor
+      elementsTextExtractor
     ),
   ]);
 
@@ -329,7 +332,7 @@ const scrapeLicensesAndCertifications = async (
 };
 
 const downloadPdfAndReturnFileName = async (page: Page): Promise<string> => {
-  //@ts-ignore
+  // @ts-ignore
   await page._client.send('Page.setDownloadBehavior', {
     behavior: 'allow',
     downloadPath: './downloads',
@@ -344,15 +347,16 @@ const downloadPdfAndReturnFileName = async (page: Page): Promise<string> => {
     throw new Error('Profile info section not found');
   }
 
-  const [profileName] = await profileInfoSection.$$eval('h3', textExtractor);
-
+  const [profileName] = await profileInfoSection.$$eval(
+    'h3',
+    elementsTextExtractor
+  );
   const downloadButton = (await profileInfoActionSection.$$('button'))[1];
 
   if (!downloadButton) {
     throw new Error('Download button not found');
   }
   await downloadButton.click();
-
   await page.waitForTimeout(2000);
 
   console.log('Downloaded pdf');
@@ -369,7 +373,6 @@ const openNavigationMenu = async (page: Page) => {
     throw new Error('Navigation menu not found');
   }
   navigationMenu.hover();
-
   await page.waitForTimeout(1000);
 
   console.log('Opened navigation menu');
@@ -384,8 +387,5 @@ const signOut = async (page: Page) => {
 
   console.log('Signed out');
 };
-
-const textExtractor = (elements: Element[]) =>
-  elements.map((element: Element) => element.textContent);
 
 export default scrape;

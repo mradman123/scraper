@@ -9,7 +9,7 @@ coverage/
 node_modules/
 
 # Environment config
-.env
+# .env
 
 # VS Code config
 .vscode

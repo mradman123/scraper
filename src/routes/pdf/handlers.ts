@@ -9,12 +9,12 @@ export const downloadPdf = async (
   next: NextFunction
 ): Promise<void> => {
   const { email } = req.query;
-  console.log('DOWNLOADING', email);
+
   if (!email) {
     throw new Error('Email is missing from query');
   }
 
-  const userProfile = await UserProfileModel.findOne({
+  const userProfile: UserProfile | null = await UserProfileModel.findOne({
     email: email as string,
   });
 

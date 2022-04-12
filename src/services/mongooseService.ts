@@ -1,7 +1,7 @@
 import mongoose, { ConnectionOptions } from 'mongoose';
 
 const dbUri: string = process.env.MONGODB_URI || 'localhost:27017';
-console.log(process.env.MONGODB_URI);
+
 const dbOptions: ConnectionOptions = {
   autoReconnect: true,
   useCreateIndex: true,
